@@ -1,0 +1,13 @@
+{
+  "srvcId" : "inventory-storage",
+  "descriptor" : {
+    "dockerImage" : "{{ mod_metadata_modules[0].docker_image }}",
+    "env" : [
+      { "name" : "db.host", "value" : "{{ pg_host }}" },
+      { "name" : "db.port", "value" : "{{ pg_port }}" },
+      { "name" : "db.username", "value" : "{{ pg_user }}" },
+      { "name" : "db.password", "value" : "{{ pg_password }}" },
+      { "name" : "db.database", "value" : "{{ mod_metadata_db }}" }
+    ]
+  }
+}

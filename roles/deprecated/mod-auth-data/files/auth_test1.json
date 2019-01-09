@@ -1,0 +1,12 @@
+{
+   "username" : "auth_test1",
+   "type" : "employee",
+   "personal" : {
+      "email" : "kayla@collins-grady.lr",
+      "firstName" : "Maureen",
+      "lastName" : "Boyle"
+   },
+   "active" : true,
+   "id" : "77136CF1-FF93-4C45-B7B5-187BCB711745",
+}
+

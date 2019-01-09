@@ -1,0 +1,19 @@
+module.exports = {
+  config: {
+  {% if disable_auth %}
+    "disableAuth" : true,
+  {% endif %}
+    logCategories: 'core,path,action,xhr',
+    logPrefix: '--',
+    showPerms: false
+  },
+  okapi: {
+    "url" : "{{ stripes_okapi_url }}",
+    "tenant" : "{{ stripes_tenant }}"
+  },
+  modules: {
+    {% for module in stripes_modules %}
+    "{{ module.name }}" : {}{% if not loop.last %},{% endif %}
+    {% endfor %}
+  }
+};

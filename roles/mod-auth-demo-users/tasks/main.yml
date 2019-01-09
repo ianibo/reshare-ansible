@@ -1,0 +1,139 @@
+---
+# Role to make sure there are mod-auth users and permissions
+# for all users in mod-users
+# Just a temporary workaround to make the demo look nice
+
+- name: Login as {{ admin_user.username }}
+  uri:
+    url: "{{ okapi_url }}/authn/login"
+    method: POST
+    body_format: json
+    headers:
+      X-Okapi-Tenant: "{{ tenant }}"
+      Accept: application/json
+    body: "{ 'username' : '{{ admin_user.username }}', 'password' : '{{ admin_user.password }}' }"
+    status_code: 201
+  register: tenant_admin_login
+
+# Get users up to 300
+- name: Get 1st 100 users
+  uri:
+    url: "{{ okapi_url }}/users?limit=100"
+    headers:
+      X-Okapi-Tenant: "{{ tenant }}"
+      Accept: application/json
+      X-Okapi-Token: "{{ tenant_admin_login.x_okapi_token | default('token') }}"
+  register: users1
+
+- name: Copy users to variable
+  set_fact: users={{ users1.json.users }}
+
+- name: Get 2nd 100 users
+  uri:
+    url: "{{ okapi_url }}/users?offset=100&limit=100"
+    headers:
+      X-Okapi-Tenant: "{{ tenant }}"
+      Accept: application/json
+      X-Okapi-Token: "{{ tenant_admin_login.x_okapi_token | default('token') }}"
+  register: users2
+  when: users1.json.{{ total_records_key }} > 100
+
+- name: Merge users into list
+  set_fact: users={{ users|union(users2.json.users) }}
+  when: users1.json.{{ total_records_key }} > 100
+
+- name: Get 3rd 100 users
+  uri:
+    url: "{{ okapi_url }}/users?offset=200&limit=100"
+    headers:
+      X-Okapi-Tenant: "{{ tenant }}"
+      Accept: application/json
+      X-Okapi-Token: "{{ tenant_admin_login.x_okapi_token | default('token') }}"
+  register: users3
+  when: users1.json.{{ total_records_key }} > 200
+
+- name: Merge users into list
+  set_fact: users={{ users|union(users3.json.users) }}
+  when: users1.json.{{ total_records_key }} > 200
+
+- name: Create login users 
+  uri:
+    url: "{{ okapi_url }}/authn/credentials"
+    method: POST
+    body_format: json
+    headers:
+      X-Okapi-Tenant: "{{ tenant }}"
+      X-Okapi-Token: "{{ tenant_admin_login.x_okapi_token }}"
+      Accept: application/json
+    body: '{ "username" : "{{ item.username }}", "password" : "{{ item.username }}" }'
+    status_code: 201,422
+  register: create_creds
+  changed_when: create_creds.status == 201
+  with_items: "{{ users }}"
+
+- name: Create perms users (auth by username)
+  uri:
+    url: "{{ okapi_url }}/perms/users"
+    method: POST
+    body_format: json
+    headers:
+      X-Okapi-Tenant: "{{ tenant }}"
+      X-Okapi-Token: "{{ tenant_admin_login.x_okapi_token }}"
+      Accept: application/json
+    body: '{ "username" : "{{ item.username }}" }'
+    status_code: 201,422
+  register: create_perms
+  changed_when: create_perms.status == 201
+  with_items: "{{ users }}"
+  when: auth_by_username
+
+- name: Create perms users (auth by id)
+  uri:
+    url: "{{ okapi_url }}/perms/users"
+    method: POST
+    body_format: json
+    headers:
+      X-Okapi-Tenant: "{{ tenant }}"
+      X-Okapi-Token: "{{ tenant_admin_login.x_okapi_token }}"
+      Accept: application/json
+    body: '{ "userId" : "{{ item.id }}" }'
+    status_code: 201,422
+  register: create_perms
+  changed_when: create_perms.status == 201
+  with_items: "{{ users }}"
+  when: not auth_by_username
+
+- name: Get service points
+  uri:
+    url: "{{ okapi_url }}/service-points"
+    headers:
+      X-Okapi-Tenant: "{{ tenant }}"
+      X-Okapi-Token: "{{ tenant_admin_login.x_okapi_token }}"
+      Accept: application/json
+  register: service_points
+  when: service_points_users
+
+- name: Set list of service point ids
+  set_fact: service_points_ids={{ '\"' + service_points|json_query('json.servicepoints[*].id')|join('\", \"') + '\"' }}
+  when: service_points_users
+
+- name: Create service points users
+  uri:
+    url: "{{ okapi_url }}/service-points-users"
+    method: POST
+    body_format: json
+    headers:
+      X-Okapi-Tenant: "{{ tenant }}"
+      X-Okapi-Token: "{{ tenant_admin_login.x_okapi_token }}"
+      Accept: application/json
+    status_code: 201,422 
+    body: >-
+      {
+        "userId": "{{ item.id }}",
+        "servicePointsIds": [ {{ service_points_ids }} ],
+        "defaultServicePointId": "{{ service_points|json_query('json.servicepoints[*].id')|random }}"
+      }        
+  register: create_sp_user
+  changed_when: create_sp_user.status == 201
+  with_items: "{{ users }}"
+  when: service_points_users

@@ -1,0 +1,12 @@
+{
+   "type" : "employee",
+   "username" : "auth_test2",
+   "active" : false,
+   "personal" : {
+      "firstName" : "Allison",
+      "lastName" : "Conroy",
+      "email" : "vita@schroeder-emard-and-weissnat.pro"
+   },
+   "id" : "17B39C4D-FFAE-4D62-A75D-1B22F45A081E"
+}
+

@@ -1,0 +1,121 @@
+---
+# Role to build a Docker image from source and launch with Okapi
+# Undeploy and rebuild if repository updated
+- name: Check status of mod-users deployment
+  uri:
+    url: http://localhost:9130/_/discovery/modules/users-module
+    status_code: 200, 404
+  register: mod_users_deploy_status
+
+- name: Set fact - instId for mod-users
+  set_fact: mod_users_instid={{ mod_users_deploy_status.json.0.instId }}
+  when:
+    - mod_users_clone.changed
+    - mod_users_deploy_status.status == 200
+
+- name: Get tenants
+  uri:
+    url: http://localhost:9130/_/proxy/tenants
+    status_code: 200
+  when:
+    - mod_users_clone.changed
+    - mod_users_deploy_status.status == 200
+  register: tenants
+
+- name: Check tenant mod-user registration
+  uri:
+    url: http://localhost:9130/_/proxy/tenants/{{ item.id }}/modules/users-module
+    status_code: 200, 404
+  when:
+    - mod_users_clone.changed
+    - mod_users_deploy_status.status == 200
+  with_items: "{{ tenants.json | default([]) }}"
+  register: tenant_mod_users
+
+- name: Unregister mod-users module for tenants if repo updated
+  uri:
+    url: http://localhost:9130/_/proxy/tenants/{{ item.item.id }}/modules/users-module
+    method: DELETE
+    status_code: 204
+  when:
+    - mod_users_clone.changed
+    - mod_users_deploy_status.status == 200
+    - item.status == 200
+  with_items: "{{ tenant_mod_users.results | default([]) }}"
+
+- name: Undeploy mod-users module if repo updated
+  uri:
+    url: http://localhost:9130/_/discovery/modules/users-module/{{ mod_users_instid }}
+    method: DELETE
+    status_code: 204, 404
+  when:
+    - mod_users_clone.changed
+    - mod_users_deploy_status.status == 200
+  register: mod_users_undeploy
+  changed_when: "mod_users_undeploy.status == 204"
+
+- name: Un-register mod-users if repository updated
+  uri:
+    url: http://localhost:9130/_/proxy/modules/users-module
+    method: DELETE
+    status_code: 204, 404
+  when: mod_users_clone.changed
+  register: mod_users_unreg
+  changed_when: "mod_users_unreg.status == 204"
+
+- name: Remove mod-users image if repository updated
+  become: yes
+  docker_image: name=mod-users state=absent force=yes
+  when: mod_users_clone.changed
+
+- name: Build mod-users Docker image
+  become: yes
+  docker_image: name=mod-users path={{ mod_users_src_home }}
+
+- name: Check mod-users module registration
+  uri:
+    url: http://localhost:9130/_/proxy/modules/users-module
+    status_code: 200, 404
+  register: mod_users_reg_status
+
+- name: Get the ModuleDescriptor
+  fetch: src={{ mod_users_src_home }}/ModuleDescriptor.json dest=/tmp
+  when: mod_users_reg_status.status == 404
+
+- name: Register mod-users module
+  uri:
+    url: http://localhost:9130/_/proxy/modules
+    method: POST
+    body_format: json
+    body: "{{ lookup('file', '/tmp/' ~ inventory_hostname ~ '/' ~ mod_users_src_home ~ '/ModuleDescriptor.json') }}"
+    status_code: 201
+  when: mod_users_reg_status.status == 404
+  register: mod_users_reg
+  changed_when: "mod_users_reg.status == 201"
+
+- name: Deploy mod-users module
+  uri:
+    url: http://localhost:9130/_/discovery/modules
+    method: POST
+    HEADER_Content-Type: application/json
+    body: |
+      {
+        "srvcId" : "users-module",
+        "nodeId" : "localhost",
+        "descriptor" :
+          {
+            "dockerImage" : "mod-users",
+            "dockerCMD" :
+              [
+                "embed_postgres=true"
+              ]
+          }
+      }
+    status_code: 201
+  when: mod_users_deploy_status.status == 404 or mod_users_undeploy.changed
+  register: mod_users_deploy
+  changed_when: "mod_users_deploy.status == 201"
+
+- name: Give mod_users a chance to spin up
+  pause: seconds=45
+  when: mod_users_deploy.changed == true

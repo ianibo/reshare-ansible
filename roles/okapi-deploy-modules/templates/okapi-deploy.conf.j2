@@ -1,0 +1,17 @@
+#
+# FOLIO okapi-deploy configuration
+#
+
+# The okapi-deploy service posts a deployment descriptors to a running Okapi
+# Stopping the service calls the okapi-undeploy script to delete all
+# running instances on the Okapi node.
+
+okapi_url="{{ okapi_url }}"
+modules="{% for module in folio_modules_withid %}{{ module.name|default('') }}{% if not loop.last %} {% endif %}{% endfor %}"
+module_ids="{% for module in folio_modules_withid %}{{ module.module_id|default('') }}{% if not loop.last %} {% endif %}{% endfor %}"
+
+declare -A okapi_env
+# Enter Okapi environment variables here, e.g.:
+# okapi_env=([db.host]=localhost)
+okapi_env=()
+

@@ -1,0 +1,13 @@
+---
+# mod-users-bl-data role
+okapi_port: 9130
+okapi_url: "http://{{ ansible_default_ipv4.address }}:{{ okapi_port }}"
+mod_users_bl_prefix: mod-users-bl
+admin_user: { username: diku_admin, password: admin }
+mod_users_bl_permissions:
+  - username: diku_admin
+    perms_user_id: 2408ae64-56ad-4177-9024-1e35fe5d895c
+    permissions:
+      - users-bl.all
+auth_by_username: false
+top_down_install: false

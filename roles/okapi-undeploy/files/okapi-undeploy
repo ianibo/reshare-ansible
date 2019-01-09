@@ -1,0 +1,40 @@
+#!/usr/bin/perl
+use strict;
+use warnings;
+use LWP;
+use JSON;
+
+my $module = $ARGV[0];
+die "Usage: folio-undeploy <module-id> [<okapi-url>]\n" unless $module;
+
+my $okapi = $ARGV[1]?$ARGV[1]:"http://localhost:9130";
+
+my $ua = LWP::UserAgent->new;
+my $undeploy_count = 0;
+my $response = $ua->get("$okapi/_/deployment/modules");
+if ($response->is_success) {
+  my $modules_ref = eval { decode_json($response->content); };
+  if ($@) {
+    die "Error parsing Okapi response: $@\n";
+  }
+  foreach my $i (@{$modules_ref}) {
+    if ($$i{srvcId} eq $module) {
+      my $delete_response = $ua->delete("$okapi/_/deployment/modules/$$i{instId}");
+      if ($delete_response->is_success) {
+        $undeploy_count++;
+        print "$module $$i{instId} undeployed from $okapi\n";
+      } else {
+        warn "Unable to undeploy instance $$i{instId} of module $module from $okapi: " . $delete_response->status_line . "\n";
+      }
+    }
+  }
+} elsif ($response->message =~ /^Can\'t connect to/) {
+  warn "Can't connect to okapi at $okapi\n";
+} else {
+  die "Undeploy failed: " . $response->status_line . "\n";
+}
+if ($undeploy_count == 0) {
+  warn "No instances of $module deployed on $okapi\n";
+}
+
+exit 0;

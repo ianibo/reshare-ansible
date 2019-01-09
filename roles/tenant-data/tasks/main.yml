@@ -1,0 +1,35 @@
+---
+
+# sometimes this role is run right after okapi is started.  Wait some
+# interval to ensure okapi is fully started
+- wait_for: timeout=15
+
+# Role to load a dummy tenant
+- name: Check tenant
+  uri:
+    url: "{{ okapi_url }}/_/proxy/tenants/{{ tenant }}"
+    status_code: 200, 404
+  register: tenant_check
+
+- name: Create tenant
+  uri:
+    url: "{{ okapi_url }}/_/proxy/tenants"
+    method: POST
+    body_format: json
+    body: "{{ tenant_json }}"
+    status_code: 201
+  when: tenant_check.status == 404
+  register: tenant_created
+  changed_when: "tenant_created.status == 201"
+
+# Returns 400 if already enabled
+- name: Enable Okapi internal module for tenant
+  uri:
+    url: "{{ okapi_url }}/_/proxy/tenants/{{ tenant }}/modules"
+    method: POST
+    body_format: json
+    body: '{ "id": "okapi" }'
+    status_code: 201,400
+  register: tenant_enable_okapi
+  changed_when: "tenant_enable_okapi.status == 201"
+  when: enable_okapi

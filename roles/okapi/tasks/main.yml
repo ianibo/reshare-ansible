@@ -1,0 +1,83 @@
+---
+
+- name: Install prereqs from apt for adding repository
+  become: yes
+  apt: name={{ item }}
+  with_items:
+    - apt-transport-https
+    - ca-certificates
+    - python-apt
+    - ssl-cert
+
+- name: Create Okapi postgresql user
+  postgresql_user:
+    db: postgres
+    login_host: "{{ pg_host }}"
+    login_user: "{{ pg_admin_user }}"
+    login_password: "{{ pg_admin_password }}"
+    name: "{{ okapidb_user }}"
+    password: "{{ okapidb_password }}"
+    role_attr_flags: CREATEDB
+    no_password_changes: yes
+  when: okapi_storage == "postgres"
+
+- name: Create Okapi db
+  postgresql_db:
+    login_host: "{{ pg_host }}"
+    login_user: "{{ okapidb_user }}"
+    login_password: "{{ okapidb_password }}"
+    name: "{{ okapidb_name }}"
+    owner: "{{ okapidb_user }}"
+  when: okapi_storage == "postgres"
+
+- name: Install okapi debian package 
+  become: yes
+  apt: 
+    name: "okapi{% if okapi_version %}={{ okapi_version }}{% endif %}"
+    state: present
+
+- name: Enable external hazelcast config if AWS
+  set_fact: 
+    okapi_cluster_config_file: '"-hazelcast-config-file /etc/folio/okapi/hazelcast.xml"'
+  when: hazelcast_aws_conf
+
+- name: Install okapi.env
+  become: yes
+  template: src=okapi.env.j2 dest=/etc/default/okapi
+  notify: okapi restart
+
+- name: Install okapi.conf
+  become: yes
+  template: 
+    src: okapi.conf.j2 
+    dest: /etc/folio/okapi/okapi.conf 
+    owner: okapi
+    group: okapi
+    mode: 0644
+  notify: okapi restart
+
+- name: Install hazelcast.xml
+  become: yes
+  template: 
+    src: hazelcast-aws.xml.j2 
+    dest: /etc/folio/okapi/hazelcast.xml 
+    owner: okapi
+    group: okapi
+    mode: 0640
+  when: hazelcast_aws_conf
+  notify: okapi restart
+
+
+- name: Initialize okapi database
+  become: yes
+  shell: /usr/share/folio/okapi/bin/okapi.sh --initdb && touch /var/lib/okapi/.db_init 
+  args:
+    creates: /var/lib/okapi/.db_init
+  when: okapi_storage == "postgres"
+  notify: okapi restart
+
+- meta: flush_handlers
+
+- name: Make sure Okapi is started
+  become: yes
+  service: name=okapi state=started

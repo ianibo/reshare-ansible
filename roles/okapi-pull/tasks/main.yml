@@ -1,0 +1,15 @@
+---
+# Role to pull module descriptors from a central repo
+
+# wait a few seconds to make sure okapi is up
+- wait_for: timeout=10
+
+- name: Pull module descriptors
+  uri:
+    url: "{{ okapi_url }}/_/proxy/pull/modules"
+    body_format: json
+    method: POST
+    body: "{{ mod_descr_repos }}"
+    timeout: "{{ okapi_pull_timeout }}"
+  register: okapi_pull
+  changed_when: okapi_pull.json is defined and okapi_pull.json

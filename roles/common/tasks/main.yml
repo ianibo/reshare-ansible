@@ -1,0 +1,56 @@
+---
+# Common tasks for all roles
+
+- name: Update apt-cache if not updated in last sixty minutes
+  become: yes
+  apt: 
+    update-cache: yes
+    cache_valid_time: 3600
+
+- name: create folio group
+  become: yes
+  group: name={{ folio_group }} system=yes
+
+- name: create folio user
+  become: yes
+  user: name={{ folio_user }} system=yes group={{ folio_group }}
+
+- name: Add ansible user to folio group
+  become: yes
+  user: name={{ ansible_user }} groups={{ folio_group }}
+
+- name: Install prerequisites from apt
+  become: yes
+  apt: name={{ item }} state=present
+  with_items:
+    - git
+    - curl
+    - apt-transport-https
+    - ca-certificates
+    - unzip
+    - jq
+
+- name: Install postgresql client things on all nodes
+  become: yes
+  apt: 
+    name: "{{ item }}"
+    state: present
+  with_items: 
+    - libpq-dev
+    - python-psycopg2  
+    - postgresql-client
+
+- name: Set up FOLIO apt repo GPG key
+  become: yes
+  apt_key: 
+    id: "{{ folio_apt_key_id }}"
+    url: "{{ folio_apt_key_url }}"
+    state: present
+  
+- name: Configure FOLIO apt repository
+  become: yes
+  apt_repository:
+    repo: deb "{{ folio_apt_repo_url }}" "{{ item }}"/
+    filename: folioci
+    state: present
+  with_items: "{{ folio_apt_repos }}"

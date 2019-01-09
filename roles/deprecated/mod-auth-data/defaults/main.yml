@@ -1,0 +1,56 @@
+---
+okapi_port: 9130
+
+okapi_url: "http://{{ ansible_default_ipv4.address }}:{{ okapi_port }}"
+
+pg_admin_user: folio_admin
+pg_admin_password: folio_admin
+pg_host: "{{ ansible_default_ipv4.address }}"
+pg_port: 5432
+
+module_database: okapi_modules
+
+# Prefixes for module ids
+mod_auth_prefixes:
+  - permissions-module
+  - authtoken-module
+  - login-module
+  - mod-users
+
+# Schema names for db
+mod_permissions_schema: diku_permissions_module
+mod_login_schema: diku_login_module
+mod_users_schema: diku_mod_users
+
+admin_user:
+  username: diku_admin
+  password: admin
+  hash: 52DCA1934B2B32BEA274900A496DF162EC172C1E
+  salt: 483A7C864569B90C24A0A6151139FF0B95005B16
+  perms_user_id: 2408ae64-56ad-4177-9024-1e35fe5d895c
+  permissions: "\\\"perms.all\\\""
+  id: 1ad737b0-d847-11e6-bf26-cec0c932ce01
+  first_name: DIKU
+  last_name: ADMINISTRATOR
+  email: admin@diku.example.org
+
+admin_permissions:
+  - login.all
+  - users.all
+
+# Permissions not defined in module descriptors
+additional_permissions: []
+
+mod_auth_users:
+  - username: auth_test1
+    id: 77136CF1-FF93-4C45-B7B5-187BCB711745
+    perms_user_id: e12e46e4-9293-4f75-99ab-181633ab9530
+    password: diku
+  - username: auth_test2
+    id: 17B39C4D-FFAE-4D62-A75D-1B22F45A081E
+    perms_user_id: f0977134-cd1a-4e0d-978e-9cad29e9a98a
+    password: diku
+
+auth_by_username: false
+
+top_down_install: false

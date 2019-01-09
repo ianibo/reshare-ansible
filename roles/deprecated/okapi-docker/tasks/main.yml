@@ -1,0 +1,34 @@
+# Role to deploy an Okapi server from source in a Docker container to a Debian Jessie box
+- name: Create Okapi src directory
+  become: yes
+  file: path={{ okapi_src_home }} state=directory group={{ folio_group }} owner={{ folio_user }}
+
+- name: Clone Okapi repository
+  become: yes
+  become_user: "{{ folio_user }}"
+  git: repo=https://github.com/folio-org/okapi.git dest={{ okapi_src_home }}
+  register: okapi_clone
+
+- name: Remove Okapi container if repository updated
+  become: yes
+  docker_container: name=okapi image=okapi network_mode=host state=absent
+  when: okapi_clone.changed
+
+- name: Remove Okapi image if repository updated
+  become: yes
+  docker_image: name=okapi state=absent
+  when: okapi_clone.changed
+
+- name: Build Okapi Docker image
+  become: yes
+  docker_image: name=okapi path={{ okapi_src_home }}
+
+- name: Launch Okapi Docker container
+  become: yes
+  docker_container: name=okapi image=okapi network_mode=host
+  register: okapi_launch
+
+- name: Give Okapi a chance to spin up
+  pause: seconds=10
+  when: okapi_launch.changed == true
+

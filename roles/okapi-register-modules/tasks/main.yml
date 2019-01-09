@@ -1,0 +1,109 @@
+---
+# Role to register module descriptors with Okapi, pulling module
+# descriptor from a remote URL (e.g. GitHub repo)
+#
+
+# wait a few seconds to make sure okapi is up
+- wait_for: timeout=5
+
+#########
+# Setup #
+#########
+
+- name: Init mod_descrs
+  set_fact:
+    mod_descrs: []
+
+- name: Init mod_descrs_env
+  set_fact:
+    mod_descrs_env: []
+
+- name: Init mod_descrs_cmd
+  set_fact:
+    mod_descrs_cmd: []
+
+- name: Init mod_descrs_pull
+  set_fact:
+    mod_descrs_pull: []
+
+- name: Init folio_modules_withid
+  set_fact:
+    folio_modules_withid: []
+
+- name: Get module descriptors by URL
+  uri:
+    url: "{{ item.mod_descriptor_url }}"
+    headers:
+      Accept: application/json
+  when: item.mod_descriptor_url is defined
+  with_items: "{{ folio_modules }}"
+  register: mod_descrs_url
+
+- name: Add module descriptors to mod_descrs list
+  set_fact:
+    mod_descrs: "{{ mod_descrs|default([]) }} + [ {{ mod_descrs_url.results[item.0].json }} ]"
+  when: item.1.mod_descriptor_url is defined
+  with_indexed_items: "{{ folio_modules }}"
+
+- name: Get module descriptors from repository
+  include: get-mod-descr.yml module={{ item }}
+  when: item.mod_descriptor_url is not defined and (item.mod_descriptor_repo is defined or mod_descriptor_repo)
+  with_items: "{{ folio_modules }}"
+
+# Update launch descriptors with customizations from folio_modules list
+# could be extended to support swapping exec for dockerImage, etc.
+# For now just supports env variables, dockerCMD, and dockerPull
+- name: Update env for embedded launch descriptors
+  set_fact:
+    mod_descrs_env: "{{ mod_descrs_env|default([]) }} + [ {% if mod_descrs[item.0].launchDescriptor is defined and item.1.docker_env is defined %}{{ mod_descrs[item.0]|combine({'launchDescriptor': {'env': item.1.docker_env}},recursive=True) }}{% else %}{{ mod_descrs[item.0] }}{% endif %} ]"
+  with_indexed_items: "{{ folio_modules }}"
+  when: update_launch_descr
+
+- name: Update dockerCMD for embedded launch descriptors
+  set_fact:
+    mod_descrs_cmd: "{{ mod_descrs_cmd|default([]) }} + [ {% if mod_descrs_env[item.0].launchDescriptor is defined and item.1.docker_cmd is defined %}{{ mod_descrs_env[item.0]|combine({'launchDescriptor': {'dockerCMD': item.1.docker_cmd}},recursive=True) }}{% else %}{{ mod_descrs_env[item.0] }}{% endif %} ]"
+  with_indexed_items: "{{ folio_modules }}"
+  when: update_launch_descr
+
+- name: Update dockerPull for embedded launch descriptors
+  set_fact:
+    mod_descrs_pull: "{{ mod_descrs_pull|default([]) }} + [ {% if mod_descrs_cmd[item.0].launchDescriptor is defined and item.1.okapi_docker_pull is defined %}{{ mod_descrs_cmd[item.0]|combine({'launchDescriptor': {'dockerPull': true if item.1.okapi_docker_pull == 'true' else false}},recursive=True) }}{% else %}{{ mod_descrs_cmd[item.0] }}{% endif %} ]"
+  with_indexed_items: "{{ folio_modules }}"
+  when: update_launch_descr
+
+- name: Reset mod_descrs variable
+  set_fact:
+    mod_descrs: "{{ mod_descrs_pull }}"
+  when: update_launch_descr
+
+# This task can be removed when okapi-deploy-modules role is removed
+- name: Set folio_modules_withid variable for okapi-deploy-modules
+  set_fact:
+    folio_modules_withid: "{{ folio_modules_withid|default([]) }} + [ {{ folio_modules[item.0]|combine({'module_id':item.1.id}) }} ]"
+  with_indexed_items:
+    - "{{ mod_descrs }}"
+
+####################
+# Register modules #
+####################
+
+- name: Check module registration
+  uri:
+    url: "{{ okapi_url }}/_/proxy/modules/{{ item.id }}"
+    status_code: 200, 404
+  with_items: "{{ mod_descrs }}"
+  register: mod_reg_status
+
+- name: Register modules
+  uri:
+    url: "{{ okapi_url }}/_/proxy/modules"
+    headers:
+      Accept: application/json, text/plain
+    method: POST
+    body_format: json
+    body: "{{ item.1 }}"
+    status_code: 201
+  when: mod_reg_status.results[item.0].status == 404
+  register: mod_reg
+  changed_when: mod_reg.status == 201
+  with_indexed_items: "{{ mod_descrs }}"
